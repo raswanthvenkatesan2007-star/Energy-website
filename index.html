@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arduino People Counter Monitor</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for Inter font and general aesthetics */
+        body { font-family: 'Inter', sans-serif; }
+        .data-card {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+            transition: all 0.3s ease;
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#4f46e5',
+                        'success': '#10b981',
+                        'danger': '#ef4444',
+                        'warning': '#f59e0b',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen p-4 sm:p-8">
+
+    <div id="app" class="max-w-4xl mx-auto">
+        <header class="text-center mb-10">
+            <h1 class="text-3xl font-extrabold text-gray-800">Room Activity Monitor</h1>
+            <p class="text-gray-500 mt-2">Simulated Bluetooth Data Receiver</p>
+        </header>
+
+        <!-- Connection Status & Button -->
+        <div class="mb-8 p-4 bg-white rounded-xl data-card flex justify-between items-center flex-wrap">
+            <div class="flex items-center space-x-3">
+                <span id="connection-status-dot" class="block w-4 h-4 rounded-full bg-danger"></span>
+                <p id="connection-status-text" class="font-semibold text-danger">Status: Disconnected (Simulated)</p>
+            </div>
+            <button onclick="handleConnection()" id="connect-button" 
+                    class="mt-4 sm:mt-0 px-6 py-2 bg-primary text-white font-medium rounded-lg hover:bg-indigo-600 transition duration-150">
+                Connect Bluetooth
+            </button>
+        </div>
+
+        <!-- Data Visualization -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+            <!-- Card 1: People Count -->
+            <div class="data-card bg-white p-6 rounded-xl text-center border-b-4 border-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-primary mx-auto mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <p class="text-lg text-gray-500">People Inside</p>
+                <div class="text-5xl font-bold text-gray-800 mt-1" id="count-display">0</div>
+            </div>
+
+            <!-- Card 2: Light Status -->
+            <div class="data-card bg-white p-6 rounded-xl text-center border-b-4 border-success">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-success mx-auto mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 18V2m4 4-4-4-4 4"/>
+                    <path d="M10 21h4"/>
+                    <path d="M12 21a2 2 0 0 1-2-2v-2a2 2 0 0 1 4 0v2a2 2 0 0 1-2 2z"/>
+                </svg>
+                <p class="text-lg text-gray-500">Light State</p>
+                <div class="text-4xl font-bold text-success mt-2" id="light-display">OFF</div>
+            </div>
+
+            <!-- Card 3: Total Usage Time -->
+            <div class="data-card bg-white p-6 rounded-xl text-center border-b-4 border-warning">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-warning mx-auto mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <p class="text-lg text-gray-500">Total Usage Time</p>
+                <div class="text-3xl font-bold text-gray-800 mt-3" id="time-display">00:00:00</div>
+            </div>
+
+        </div>
+        
+        <!-- Raw Data Log -->
+        <div class="mt-8 bg-gray-100 p-4 rounded-xl">
+            <h3 class="text-xl font-semibold text-gray-700 mb-2">Raw Data Stream (Simulated)</h3>
+            <pre id="data-log" class="bg-gray-800 text-green-400 p-3 rounded-lg overflow-x-auto text-sm h-32"></pre>
+        </div>
+        
+        <!-- Connection Note for Real Apps -->
+        <div class="mt-4 p-4 bg-yellow-100 text-yellow-800 rounded-lg">
+            <p class="font-semibold">Note on Real Bluetooth Connection:</p>
+            <p class="text-sm">This browser application can only simulate the data feed. To connect to your physical HC-05 module, you need a <span class="font-bold">native mobile app</span> (Android/iOS) or a desktop application built with a language like Python or C# that has direct access to the computer's Bluetooth stack.</p>
+        </div>
+    </div>
+
+    <script>
+        // --- DATA STATE ---
+        let isConnected = false;
+        let simulationInterval = null;
+        let currentCount = 0;
+        let totalSeconds = 0;
+
+        // --- DOM REFERENCES ---
+        const countDisplay = document.getElementById('count-display');
+        const lightDisplay = document.getElementById('light-display');
+        const timeDisplay = document.getElementById('time-display');
+        const statusDot = document.getElementById('connection-status-dot');
+        const statusText = document.getElementById('connection-status-text');
+        const connectButton = document.getElementById('connect-button');
+        const dataLog = document.getElementById('data-log');
+
+        /**
+         * Converts total seconds into MM:SS format.
+         * Note: Added hours for better scaling, though Arduino transmits only seconds.
+         * @param {number} totalSeconds - Total time in seconds.
+         * @returns {string} Formatted time string (HH:MM:SS).
+         */
+        function formatTime(totalSeconds) {
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+
+            const pad = (num) => String(num).padStart(2, '0');
+            return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+        }
+
+        /**
+         * Parses the specific serial format (e.g., COUNT:1,USAGE_S:35,LIGHT:ON)
+         * and updates the UI.
+         * @param {string} dataString - The raw string received from the Arduino.
+         */
+        function parseAndDisplayData(dataString) {
+            // Trim whitespace/newlines
+            dataString = dataString.trim();
+            
+            // Log raw data
+            dataLog.textContent += dataString + '\n';
+            dataLog.scrollTop = dataLog.scrollHeight; // Auto-scroll
+
+            // Split into key-value pairs
+            const pairs = dataString.split(',');
+            const data = {};
+
+            pairs.forEach(pair => {
+                const [key, value] = pair.split(':');
+                if (key && value) {
+                    data[key.trim()] = value.trim();
+                }
+            });
+
+            // Update UI based on parsed data
+            if (data.COUNT !== undefined) {
+                currentCount = parseInt(data.COUNT);
+                countDisplay.textContent = currentCount;
+            }
+
+            if (data.USAGE_S !== undefined) {
+                totalSeconds = parseInt(data.USAGE_S);
+                timeDisplay.textContent = formatTime(totalSeconds);
+            }
+
+            if (data.LIGHT !== undefined) {
+                const lightState = data.LIGHT.toUpperCase();
+                lightDisplay.textContent = lightState;
+                lightDisplay.className = lightState === 'ON' 
+                    ? 'text-4xl font-bold text-success mt-2' 
+                    : 'text-4xl font-bold text-danger mt-2';
+            }
+        }
+
+        /**
+         * Simulates the data stream from the Arduino.
+         */
+        function simulateDataStream() {
+            // Sample data that changes state
+            const sampleData = [
+                'COUNT:1,USAGE_S:0,LIGHT:ON',
+                'COUNT:1,USAGE_S:5,LIGHT:ON',
+                'COUNT:1,USAGE_S:10,LIGHT:ON',
+                'COUNT:2,USAGE_S:15,LIGHT:ON',
+                'COUNT:2,USAGE_S:20,LIGHT:ON',
+                'COUNT:1,USAGE_S:25,LIGHT:ON',
+                'COUNT:0,USAGE_S:280,LIGHT:OFF', // Total usage jumps here
+                'COUNT:0,USAGE_S:280,LIGHT:OFF',
+                'COUNT:1,USAGE_S:280,LIGHT:ON',
+                'COUNT:0,USAGE_S:310,LIGHT:OFF',
+            ];
+            
+            let index = 0;
+            const totalSamples = sampleData.length;
+
+            simulationInterval = setInterval(() => {
+                if (index < totalSamples) {
+                    parseAndDisplayData(sampleData[index]);
+                    index++;
+                } else {
+                    // Loop back to the start or hold the state
+                    index = 0;
+                    // Simulate a quiet period before new entry
+                    setTimeout(() => {
+                        parseAndDisplayData(sampleData[index]);
+                        index++;
+                    }, 5000); 
+                }
+            }, 500); // Shorter interval for faster simulation
+
+            // --- REAL HC-05 Connection Note ---
+            /* In a real native mobile app (Android/iOS), this is where your 
+            BluetoothSerial or similar library would register a listener for 
+            incoming data. The listener callback would receive the raw string
+            and pass it to parseAndDisplayData(rawData).
+            */
+        }
+
+        /**
+         * Handles the connection and disconnection process.
+         */
+        function handleConnection() {
+            if (isConnected) {
+                // Disconnect logic
+                clearInterval(simulationInterval);
+                isConnected = false;
+                statusDot.classList.remove('bg-success');
+                statusDot.classList.add('bg-danger');
+                statusText.textContent = 'Status: Disconnected (Simulated)';
+                statusText.classList.remove('text-success');
+                statusText.classList.add('text-danger');
+                connectButton.textContent = 'Connect Bluetooth';
+                dataLog.textContent = 'Connection closed.\n';
+
+            } else {
+                // Connect logic (Simulated for web environment)
+                isConnected = true;
+                statusDot.classList.remove('bg-danger');
+                statusDot.classList.add('bg-success');
+                statusText.textContent = 'Status: Connected & Receiving Data';
+                statusText.classList.remove('text-danger');
+                statusText.classList.add('text-success');
+                connectButton.textContent = 'Disconnect';
+                dataLog.textContent = 'Attempting connection...\n';
+                
+                // Start receiving data stream after a short delay
+                setTimeout(simulateDataStream, 1500); 
+            }
+        }
+
+        // Initialize display on load
+        document.addEventListener('DOMContentLoaded', () => {
+            timeDisplay.textContent = formatTime(0);
+        });
+
+    </script>
+</body>
+<!-- GIT SYNC FIX - DELETE AFTER SUCCESSFUL PUSH -->
+</html>
