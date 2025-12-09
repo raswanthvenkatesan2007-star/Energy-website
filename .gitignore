@@ -1,0 +1,18 @@
+.vscode/
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# Build files
+*.exe
+*.dll
+*.o
+*.a
+
+# Arduino build and temp files
+*.ino.bin
+*.elf
+*.hex
+*.lst
+*.map
