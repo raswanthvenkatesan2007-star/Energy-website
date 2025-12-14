@@ -9,15 +9,19 @@ import sys
 import serial 
 
 # --- CONFIGURATION ---
-# IMPORTANT: This must be the COM port of your HC-05 (e.g., COM7)
-SERIAL_PORT = 'COM8'    
+# IMPORTANT: This must be the COM port of your HC-05 (e.g., COM7). 
+# Check Windows Device Manager for the correct port number.
+SERIAL_PORT = 'COM8' # <-- RE-ENTER YOUR CORRECT COM PORT HERE (e.g., COM6)
 BAUD_RATE = 9600 
 RECONNECT_DELAY = 5 
 
 # --- Firebase Initialization ---
 db = None
+# This file must be present locally for WRITE access.
 SERVICE_ACCOUNT_KEY_FILE = 'serviceAccountKey.json'
-APP_ID = os.environ.get('__app_id', 'default-app-id')
+
+# CRITICAL: This ID MUST match the ID hardcoded in the deployed React Dashboard (App.jsx)
+APP_ID = 'trichy-iot-counter' 
 
 try:
     if os.path.exists(SERVICE_ACCOUNT_KEY_FILE):
@@ -26,13 +30,14 @@ try:
         db = firestore.client()
         print(f"Firebase Admin SDK initialized successfully using {SERVICE_ACCOUNT_KEY_FILE}.")
     else:
+        # Fallback path only used in Canvas, but kept for completeness
         FIREBASE_CONFIG_STR = os.environ.get('__firebase_config', '{}')
         FIREBASE_CONFIG = json.loads(FIREBASE_CONFIG_STR)
 
         if FIREBASE_CONFIG and 'projectId' in FIREBASE_CONFIG:
             firebase_admin.initialize_app(options={'projectId': FIREBASE_CONFIG.get('projectId')})
             db = firestore.client()
-            print("Firebase Admin SDK initialized successfully using Canvas config.")
+            print("Firebase Admin SDK initialized successfully using Canvas config (READ-ONLY).")
         else:
             print(f"FATAL ERROR: Missing Firebase credentials. Please place your Service Account key file named '{SERVICE_ACCOUNT_KEY_FILE}' in this directory.", file=sys.stderr)
             
@@ -168,7 +173,7 @@ if __name__ == '__main__':
         sys.exit(1)
 
     if not db:
-        print("Cannot start bridge due to Firebase initialization failure.", file=sys.stderr)
+        print("Cannot start bridge due to Firebase initialization failure. Check serviceAccountKey.json and Internet connection.", file=sys.stderr)
         sys.exit(1)
     
     print("Starting Arduino Bluetooth Serial Bridge...")
