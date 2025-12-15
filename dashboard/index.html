@@ -3,17 +3,192 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IoT Room Counter Dashboard</title>
+    <title>Live Firebase Dashboard</title>
+    <!-- Load Tailwind CSS for modern aesthetics -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { margin: 0; font-family: sans-serif; }
+        body { background-color: #f3f4f6; font-family: 'Inter', sans-serif; }
     </style>
 </head>
-<body>
-    <!-- The container where the React App component mounts -->
-    <div id="root"></div>
-    
-    <!-- CRITICAL FIX: Changed from relative (./App.jsx) to absolute path (/App.jsx) -->
-    <!-- This tells the browser to look in the root of the Vercel site for the file. -->
-    <script type="module" src="/App.jsx"></script>
+<body class="p-4 sm:p-8 min-h-screen">
+
+    <div class="max-w-5xl mx-auto">
+        <header class="text-center mb-10">
+            <h1 class="text-3xl font-extrabold text-gray-800">Standalone Firebase Live Data</h1>
+            <p class="text-gray-500 mt-2">Connecting directly to Firestore using pure JavaScript.</p>
+        </header>
+
+        <!-- Status Bar -->
+        <div class="mb-8 p-4 bg-white rounded-xl shadow-md flex justify-between items-center flex-wrap">
+            <div id="connection-status" class="flex items-center space-x-3">
+                <div id="status-light" class="w-4 h-4 rounded-full bg-yellow-500 animate-pulse"></div>
+                <p id="status-text" class="font-semibold text-yellow-700">Initializing...</p>
+            </div>
+            <div id="app-id-display" class="text-xs text-gray-500 mt-2 sm:mt-0"></div>
+        </div>
+
+        <!-- Data Display Grid -->
+        <div id="data-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Cards will be injected here -->
+        </div>
+
+        <!-- Error/Log Message Box -->
+        <div id="log-box" class="mt-12 p-4 bg-red-100 rounded-xl border border-red-300 hidden">
+            <h3 class="text-lg font-bold text-red-700">Error/Debug Log:</h3>
+            <pre id="error-message" class="text-sm text-red-600 mt-1 whitespace-pre-wrap"></pre>
+        </div>
+    </div>
+
+    <!-- JavaScript and Firebase SDK Imports -->
+    <script type="module">
+        // Import Firebase modules directly from CDN
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // --- GLOBAL VARIABLES (Provided by Canvas Environment) ---
+        // These variables are available at runtime in this environment.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        let db;
+        let auth;
+        
+        const PUBLIC_DATA_PATH = `/artifacts/${appId}/public/data/sensor_readings/latest`;
+
+        // --- Utility Functions ---
+
+        const formatTime = (totalSeconds) => {
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+            const pad = (num) => String(num).padStart(2, '0');
+            return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+        };
+
+        const logError = (message) => {
+            console.error(message);
+            const logBox = document.getElementById('log-box');
+            logBox.classList.remove('hidden');
+            document.getElementById('error-message').textContent = message;
+        }
+
+        const updateStatus = (text, colorClass) => {
+            document.getElementById('status-text').textContent = text;
+            const light = document.getElementById('status-light');
+            light.className = `w-4 h-4 rounded-full ${colorClass}`;
+            light.classList.toggle('animate-pulse', colorClass.includes('yellow'));
+        };
+
+        // --- Core Firebase Functions ---
+
+        async function authenticateUser() {
+            try {
+                // For a public dashboard, we sign in anonymously for read access.
+                await signInAnonymously(auth);
+                console.log("Signed in anonymously.");
+            } catch (error) {
+                logError(`Authentication Failed: ${error.message}`);
+            }
+        }
+
+        function startDataListener() {
+            const docRef = doc(db, PUBLIC_DATA_PATH);
+            
+            console.log("Listening to Firestore path:", PUBLIC_DATA_PATH);
+
+            onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    updateUI({
+                        count: data.count || 0,
+                        usage_s: data.usage_s || 0,
+                        light: data.light || 'OFF',
+                        lastUpdated: data.timestamp ? new Date(data.timestamp.toDate()).toLocaleTimeString() : 'N/A'
+                    });
+                    updateStatus(`Live (${data.timestamp ? new Date(data.timestamp.toDate()).toLocaleTimeString() : 'N/A'})`, 'bg-green-500');
+                } else {
+                    updateStatus('Waiting for Data...', 'bg-yellow-500');
+                    console.warn("Document does not exist. Waiting for Python script to write data.");
+                }
+            }, (error) => {
+                logError(`Firestore Error: ${error.message}`);
+                updateStatus('Connection Error', 'bg-red-500');
+            });
+        }
+
+        function initFirebase() {
+            if (Object.keys(firebaseConfig).length === 0 || !firebaseConfig.projectId) {
+                logError("CRITICAL: Firebase configuration not found. Check environment variables.");
+                updateStatus('Config Missing', 'bg-red-500');
+                return;
+            }
+
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                // Display App ID
+                document.getElementById('app-id-display').innerHTML = 
+                    `<p>App ID: <span class="text-gray-700 font-mono text-[10px]">${appId}</span></p>`;
+
+                // Proceed with authentication and then data listener
+                authenticateUser().then(startDataListener);
+                
+            } catch (error) {
+                logError(`Initialization Failed: ${error.message}`);
+                updateStatus('Init Failed', 'bg-red-500');
+            }
+        }
+
+        // --- UI Rendering ---
+        function createCard(title, value, colorClass, iconHtml) {
+            return `
+                <div class="bg-white p-6 rounded-xl text-center shadow-lg border-b-4 transition duration-300 hover:shadow-xl"
+                     style="border-color: ${colorClass};">
+                    ${iconHtml}
+                    <p class="text-lg text-gray-500">${title}</p>
+                    <div class="text-5xl font-bold mt-1" style="color: ${colorClass};">${value}</div>
+                </div>
+            `;
+        }
+        
+        function updateUI(data) {
+            const grid = document.getElementById('data-grid');
+            
+            const lightColor = data.light === 'ON' ? '#10b981' : '#ef4444';
+            const lightIcon = data.light === 'ON' ? 
+                `<svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 mx-auto mb-3 text-[${lightColor}]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 18V2m4 4-4-4-4 4"/><path d="M10 21h4"/><path d="M12 21a2 2 0 0 1-2-2v-2a2 2 0 0 1 4 0v2a2 2 0 0 1-2 2z"/></svg>` :
+                `<svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 mx-auto mb-3 text-[${lightColor}]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 6L14 18M10 6L10 18M12 2V22"/></svg>`;
+
+            const html = [
+                createCard(
+                    "People Inside", 
+                    data.count, 
+                    "#4f46e5",
+                    `<svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-[#4f46e5] mx-auto mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`
+                ),
+                createCard(
+                    "Light State", 
+                    data.light, 
+                    lightColor,
+                    lightIcon
+                ),
+                createCard(
+                    "Total Usage Time", 
+                    formatTime(data.usage_s), 
+                    "#f59e0b",
+                    `<svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-[#f59e0b] mx-auto mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`
+                )
+            ].join('');
+            
+            grid.innerHTML = html;
+        }
+
+        // Initialize Firebase when the window loads
+        window.onload = initFirebase;
+    </script>
 </body>
 </html>
