@@ -12,7 +12,8 @@
     <!-- The container where the React App component mounts -->
     <div id="root"></div>
     
-    <!-- CRITICAL FIX: Direct relative path to App.jsx in the same folder -->
-    <script type="module" src="./App.jsx"></script> 
+    <!-- CRITICAL FIX: Changed from relative (./App.jsx) to absolute path (/App.jsx) -->
+    <!-- This tells the browser to look in the root of the Vercel site for the file. -->
+    <script type="module" src="/App.jsx"></script> 
 </body>
 </html>
