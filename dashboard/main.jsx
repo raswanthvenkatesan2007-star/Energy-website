@@ -1,4 +1,4 @@
-git add .import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, collection, query, limit, orderBy } from 'firebase/firestore';
